@@ -19,7 +19,24 @@ import {
   INITIAL_STUDENTS,
 } from './utils/assignmentLogic';
 import { loadStoredData, saveStoredData, sendToGoogleSheet } from './utils/storage';
-import { submitWork, gradeAndDelete, subscribeFirebaseSubmissions } from './firebase';
+import {
+  submitWork,
+  gradeAndDelete,
+  subscribeFirebaseSubmissions,
+  subscribeSubjects,
+  saveSubjectToFirestore,
+  deleteSubjectFromFirestore,
+  subscribeStudents,
+  saveStudentToFirestore,
+  deleteStudentFromFirestore,
+  subscribeAssignments,
+  saveAssignmentToFirestore,
+  deleteAssignmentFromFirestore,
+  subscribeSettings,
+  saveSettingsToFirestore,
+  saveSubmissionRecordToFirestore,
+  initializeFirestoreDatabaseIfEmpty,
+} from './firebase';
 
 export default function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -43,8 +60,9 @@ export default function App() {
   // Toast banner state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Initial load and URL param check (e.g. ?stdId=10001 from QR Code scan)
+  // Initial load, Firestore auto-seeder, URL param check, and multi-device real-time sync
   useEffect(() => {
+    // 1. Initial fast local load
     const stored = loadStoredData();
     setSettings(stored.settings);
     setSubjects(stored.subjects);
@@ -68,15 +86,52 @@ export default function App() {
           showToast(`สแกนสำเร็จ: เข้าสู่ระบบในชื่อ ${found.name} (${found.grade}/${found.room})`);
         }
       } else {
-        // By default select first student for convenient immediate demo exploration
         if (stored.students.length > 0) {
           setActiveStudent(stored.students[0]);
         }
       }
     }
 
-    // Subscribe to real-time changes from Firebase Firestore submissions collection
-    const unsubscribe = subscribeFirebaseSubmissions((fbDocs) => {
+    // 2. Ensure Firestore cloud database is initialized with seed data if empty
+    initializeFirestoreDatabaseIfEmpty().catch((err) => {
+      console.warn('Firestore database init notice:', err);
+    });
+
+    // 3. Multi-device real-time sync: Settings
+    const unsubSettings = subscribeSettings((remoteSettings) => {
+      if (remoteSettings && remoteSettings.schoolName) {
+        setSettings(remoteSettings);
+      }
+    });
+
+    // 4. Multi-device real-time sync: Subjects
+    const unsubSubjects = subscribeSubjects((remoteSubjects) => {
+      if (remoteSubjects && remoteSubjects.length > 0) {
+        setSubjects(remoteSubjects);
+      }
+    });
+
+    // 5. Multi-device real-time sync: Students
+    const unsubStudents = subscribeStudents((remoteStudents) => {
+      if (remoteStudents && remoteStudents.length > 0) {
+        setStudents(remoteStudents);
+        setActiveStudent((curr) => {
+          if (!curr) return remoteStudents[0];
+          const match = remoteStudents.find((s) => s.id === curr.id);
+          return match || curr;
+        });
+      }
+    });
+
+    // 6. Multi-device real-time sync: Assignments
+    const unsubAssignments = subscribeAssignments((remoteAssignments) => {
+      if (remoteAssignments && remoteAssignments.length > 0) {
+        setAssignments(remoteAssignments);
+      }
+    });
+
+    // 7. Multi-device real-time sync: Submissions
+    const unsubSubmissions = subscribeFirebaseSubmissions((fbDocs) => {
       if (!fbDocs || fbDocs.length === 0) return;
       setSubmissions((prev) => {
         let changed = false;
@@ -101,6 +156,25 @@ export default function App() {
                 storageDeleted: !doc.fileUrl && doc.status === 'graded',
               };
             }
+          } else {
+            changed = true;
+            next.unshift({
+              id: doc.id,
+              firebaseDocId: doc.id,
+              assignmentId: '',
+              studentId: doc.studentId,
+              submitDate: doc.submittedAt?.toDate
+                ? doc.submittedAt.toDate().toISOString()
+                : new Date().toISOString(),
+              url: doc.fileUrl,
+              attachments: [],
+              score: doc.score !== null ? Number(doc.score) : 0,
+              graded: doc.status === 'graded',
+              isLate: false,
+              filePath: doc.filePath,
+              fileUrl: doc.fileUrl,
+              storageDeleted: !doc.fileUrl && doc.status === 'graded',
+            });
           }
         });
         return changed ? next : prev;
@@ -108,7 +182,11 @@ export default function App() {
     });
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      unsubSettings();
+      unsubSubjects();
+      unsubStudents();
+      unsubAssignments();
+      unsubSubmissions();
     };
   }, []);
 
@@ -211,6 +289,11 @@ export default function App() {
       fileUrl: uploadedFileUrl,
     };
 
+    // Save submission to Cloud Firestore so it persists across all devices
+    saveSubmissionRecordToFirestore(submissionRecord).catch((e) =>
+      console.warn('saveSubmissionRecordToFirestore notice:', e)
+    );
+
     setSubmissions((prev) => {
       // Remove any prior submission by this student for this assignment
       const filtered = prev.filter(
@@ -248,7 +331,7 @@ export default function App() {
     }
   };
 
-  // Teacher Handlers: Assignments
+  // Teacher Handlers: Assignments (Cloud Firestore Persisted)
   const handleSaveAssignment = (data: {
     id?: string;
     title: string;
@@ -258,21 +341,17 @@ export default function App() {
     dueDate: string;
   }) => {
     if (data.id) {
-      setAssignments((prev) =>
-        prev.map((a) =>
-          a.id === data.id
-            ? {
-                ...a,
-                title: data.title,
-                subjectId: data.subjectId,
-                maxScore: data.maxScore,
-                materialUrl: data.materialUrl,
-                dueDate: data.dueDate,
-              }
-            : a
-        )
-      );
-      showToast('อัปเดตงานที่มอบหมายเรียบร้อย');
+      const updated: Assignment = {
+        id: data.id,
+        title: data.title,
+        subjectId: data.subjectId,
+        maxScore: data.maxScore,
+        materialUrl: data.materialUrl,
+        dueDate: data.dueDate,
+      };
+      setAssignments((prev) => prev.map((a) => (a.id === data.id ? updated : a)));
+      saveAssignmentToFirestore(updated).catch(console.error);
+      showToast('อัปเดตงานที่มอบหมายลง Cloud Firestore เรียบร้อย');
     } else {
       const newAssign: Assignment = {
         id: 'ASN_' + Date.now(),
@@ -283,17 +362,19 @@ export default function App() {
         dueDate: data.dueDate,
       };
       setAssignments((prev) => [newAssign, ...prev]);
-      showToast('สร้างงานที่มอบหมายใหม่เรียบร้อย');
+      saveAssignmentToFirestore(newAssign).catch(console.error);
+      showToast('สร้างงานที่มอบหมายใหม่ลง Cloud Firestore เรียบร้อย');
     }
   };
 
   const handleDeleteAssignment = (id: string) => {
     setAssignments((prev) => prev.filter((a) => a.id !== id));
     setSubmissions((prev) => prev.filter((s) => s.assignmentId !== id));
-    showToast('ลบรายการงานเรียบร้อย');
+    deleteAssignmentFromFirestore(id).catch(console.error);
+    showToast('ลบรายการงานออกจากระบบและ Cloud Firestore เรียบร้อย');
   };
 
-  // Teacher Handlers: Subjects
+  // Teacher Handlers: Subjects (Cloud Firestore Persisted)
   const handleSaveSubject = (data: {
     id?: string;
     code: string;
@@ -302,14 +383,16 @@ export default function App() {
     room: string;
   }) => {
     if (data.id) {
-      setSubjects((prev) =>
-        prev.map((s) =>
-          s.id === data.id
-            ? { ...s, code: data.code, name: data.name, grade: data.grade, room: data.room }
-            : s
-        )
-      );
-      showToast('แก้ไขข้อมูลรายวิชาเรียบร้อย');
+      const updated: Subject = {
+        id: data.id,
+        code: data.code,
+        name: data.name,
+        grade: data.grade,
+        room: data.room,
+      };
+      setSubjects((prev) => prev.map((s) => (s.id === data.id ? updated : s)));
+      saveSubjectToFirestore(updated).catch(console.error);
+      showToast('แก้ไขข้อมูลรายวิชาใน Cloud Firestore เรียบร้อย');
     } else {
       const newSub: Subject = {
         id: 'SUB_' + Date.now(),
@@ -319,16 +402,18 @@ export default function App() {
         room: data.room,
       };
       setSubjects((prev) => [...prev, newSub]);
-      showToast('เพิ่มรายวิชาใหม่เรียบร้อย');
+      saveSubjectToFirestore(newSub).catch(console.error);
+      showToast('เพิ่มรายวิชาใหม่ลง Cloud Firestore เรียบร้อย');
     }
   };
 
   const handleDeleteSubject = (id: string) => {
     setSubjects((prev) => prev.filter((s) => s.id !== id));
-    showToast('ลบรายวิชาเรียบร้อย');
+    deleteSubjectFromFirestore(id).catch(console.error);
+    showToast('ลบรายวิชาออกจากระบบและ Cloud Firestore เรียบร้อย');
   };
 
-  // Teacher Handlers: Students
+  // Teacher Handlers: Students (Cloud Firestore Persisted)
   const handleSaveStudent = (data: {
     id: string;
     originalId?: string;
@@ -338,31 +423,22 @@ export default function App() {
     number: number;
   }) => {
     if (data.originalId) {
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === data.originalId
-            ? {
-                ...s,
-                id: data.id,
-                name: data.name,
-                grade: data.grade,
-                room: data.room,
-                number: data.number,
-              }
-            : s
-        )
-      );
-      // Update active student if same
-      if (activeStudent?.id === data.originalId) {
-        setActiveStudent({
-          id: data.id,
-          name: data.name,
-          grade: data.grade,
-          room: data.room,
-          number: data.number,
-        });
+      const updated: Student = {
+        id: data.id,
+        name: data.name,
+        grade: data.grade,
+        room: data.room,
+        number: data.number,
+      };
+      setStudents((prev) => prev.map((s) => (s.id === data.originalId ? updated : s)));
+      if (data.originalId !== data.id) {
+        deleteStudentFromFirestore(data.originalId).catch(console.error);
       }
-      showToast('แก้ไขข้อมูลนักเรียนเรียบร้อย');
+      saveStudentToFirestore(updated).catch(console.error);
+      if (activeStudent?.id === data.originalId) {
+        setActiveStudent(updated);
+      }
+      showToast('แก้ไขข้อมูลนักเรียนใน Cloud Firestore เรียบร้อย');
     } else {
       const newStd: Student = {
         id: data.id,
@@ -372,17 +448,19 @@ export default function App() {
         number: data.number,
       };
       setStudents((prev) => [...prev, newStd]);
-      showToast('เพิ่มนักเรียนใหม่เรียบร้อย');
+      saveStudentToFirestore(newStd).catch(console.error);
+      showToast('เพิ่มนักเรียนใหม่ลง Cloud Firestore เรียบร้อย');
     }
   };
 
   const handleDeleteStudent = (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
     setSubmissions((prev) => prev.filter((s) => s.studentId !== id));
+    deleteStudentFromFirestore(id).catch(console.error);
     if (activeStudent?.id === id) {
       setActiveStudent(null);
     }
-    showToast('ลบข้อมูลนักเรียนเรียบร้อย');
+    showToast('ลบข้อมูลนักเรียนออกจาก Cloud Firestore เรียบร้อย');
   };
 
   // Teacher Handlers: Single submission gradeAndDelete (Firebase Storage & Firestore)
@@ -417,13 +495,23 @@ export default function App() {
 
   // Teacher Handlers: Batch Grading
   const handleSaveGrades = (updates: Array<{ submissionId: string; score: number }>) => {
-    // Automatically trigger gradeAndDelete for submissions with active Storage files
+    // Automatically trigger gradeAndDelete and Firestore updates
     updates.forEach((u) => {
       const sub = submissions.find((s) => s.id === u.submissionId);
-      if (sub && (sub.firebaseDocId || sub.filePath) && !sub.storageDeleted) {
-        gradeAndDelete(sub.firebaseDocId || sub.id, sub.filePath || '', u.score).catch((err) =>
-          console.warn('Batch gradeAndDelete notice:', err)
-        );
+      if (sub) {
+        const updatedSub: Submission = {
+          ...sub,
+          score: u.score,
+          graded: true,
+          storageDeleted: sub.filePath ? true : sub.storageDeleted,
+          fileUrl: sub.filePath ? undefined : sub.fileUrl,
+        };
+        saveSubmissionRecordToFirestore(updatedSub).catch(console.error);
+        if ((sub.firebaseDocId || sub.filePath) && !sub.storageDeleted) {
+          gradeAndDelete(sub.firebaseDocId || sub.id, sub.filePath || '', u.score).catch((err) =>
+            console.warn('Batch gradeAndDelete notice:', err)
+          );
+        }
       }
     });
 
@@ -445,10 +533,11 @@ export default function App() {
     showToast('บันทึกคะแนนและตรวจงานเรียบร้อย (ลบไฟล์ใน Storage คืนพื้นที่โควต้า 5GB)');
   };
 
-  // Teacher Handlers: Settings
+  // Teacher Handlers: Settings (Cloud Firestore Persisted)
   const handleSaveSettings = (newSettings: AppSettings) => {
     setSettings(newSettings);
-    showToast('บันทึกการตั้งค่าระบบเรียบร้อย');
+    saveSettingsToFirestore(newSettings).catch(console.error);
+    showToast('บันทึกการตั้งค่าระบบลง Cloud Firestore เรียบร้อย');
   };
 
   return (

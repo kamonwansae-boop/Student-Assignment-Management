@@ -4,5 +4,17 @@ service cloud.firestore {
     match /submissions/{submissionId} {
       allow read, write: if true;
     }
+    match /subjects/{subjectId} {
+      allow read, write: if true;
+    }
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+    match /assignments/{assignmentId} {
+      allow read, write: if true;
+    }
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
   }
 }

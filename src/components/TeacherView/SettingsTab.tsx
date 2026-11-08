@@ -135,7 +135,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             className="w-full p-2.5 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 bg-white"
           />
           <p className="text-[11px] text-slate-500">
-            หากเว้นว่างไว้ ระบบจะบันทึกข้อมูลและคำนวณคะแนนใน LocalStorage ของเบราว์เซอร์อย่างสมบูรณ์
+            ระบบบันทึกข้อมูลและคะแนนใน Cloud Firestore เชื่อมต่อแบบเรียลไทม์ ซิงค์ตรงกันทุกอุปกรณ์และข้อมูลไม่สูญหาย
           </p>
 
           <button

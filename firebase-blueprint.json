@@ -17,6 +17,10 @@
           "type": "string",
           "description": "Title of the assignment"
         },
+        "assignmentId": {
+          "type": "string",
+          "description": "ID of associated assignment"
+        },
         "filePath": {
           "type": "string",
           "description": "Firebase Storage path in submissions/"
@@ -24,6 +28,14 @@
         "fileUrl": {
           "type": "string",
           "description": "Public download URL for the uploaded image"
+        },
+        "url": {
+          "type": "string",
+          "description": "External submission URL (Google Drive, Canva, etc.)"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Comment to teacher"
         },
         "status": {
           "type": "string",
@@ -34,13 +46,124 @@
           "type": ["number", "null"],
           "description": "Score given by teacher or null if pending"
         },
+        "graded": {
+          "type": "boolean",
+          "description": "Whether submission has been graded"
+        },
+        "isLate": {
+          "type": "boolean",
+          "description": "Whether submitted past deadline"
+        },
         "submittedAt": {
           "type": "string",
           "format": "date-time",
           "description": "Timestamp when the work was submitted"
         }
       },
-      "required": ["studentId", "studentName", "title", "filePath", "status"]
+      "required": ["studentId", "title", "status"]
+    },
+    "subjects": {
+      "title": "Subjects",
+      "description": "Academic course subjects offered across grades",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Course code (e.g. ว31241)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Subject name (e.g. เคมี 1)"
+        },
+        "grade": {
+          "type": "string",
+          "description": "Grade level (ม.1 - ม.6)"
+        },
+        "room": {
+          "type": "string",
+          "description": "Classroom room number or ALL"
+        }
+      },
+      "required": ["code", "name", "grade"]
+    },
+    "students": {
+      "title": "Students",
+      "description": "Registered students roster",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Student ID (e.g. 10001)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full student name"
+        },
+        "grade": {
+          "type": "string",
+          "description": "Grade level (e.g. ม.1)"
+        },
+        "room": {
+          "type": "string",
+          "description": "Classroom room number (e.g. 1)"
+        },
+        "number": {
+          "type": "number",
+          "description": "Class roll number"
+        }
+      },
+      "required": ["id", "name", "grade", "room"]
+    },
+    "assignments": {
+      "title": "Assignments",
+      "description": "Homework and assignment tasks assigned by teachers",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Assignment title"
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Subject ID"
+        },
+        "maxScore": {
+          "type": "number",
+          "description": "Maximum score attainable"
+        },
+        "materialUrl": {
+          "type": "string",
+          "description": "Instruction document or resource URL"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Deadline timestamp ISO string"
+        }
+      },
+      "required": ["title", "subjectId", "maxScore", "dueDate"]
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "School and teacher application configuration",
+      "type": "object",
+      "properties": {
+        "schoolName": {
+          "type": "string"
+        },
+        "teacherName": {
+          "type": "string"
+        },
+        "schoolLogo": {
+          "type": ["string", "null"]
+        },
+        "googleSheetUrl": {
+          "type": "string"
+        },
+        "adminPassword": {
+          "type": "string"
+        }
+      },
+      "required": ["schoolName", "teacherName"]
     }
   }
 }

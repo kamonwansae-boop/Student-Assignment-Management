@@ -125,8 +125,8 @@ export const TeacherView: React.FC<TeacherViewProps> = ({
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
           <span className="text-xs font-semibold text-slate-700">
             {settings.googleSheetUrl
-              ? 'เชื่อมต่อ Google Sheet พร้อมใช้งาน'
-              : 'โหมดฐานข้อมูล LocalStorage พร้อมใช้งาน'}
+              ? 'เชื่อมต่อ Google Sheet & Cloud Firestore ซิงค์ทุกอุปกรณ์'
+              : 'ฐานข้อมูล Cloud Firestore ซิงค์ทุกอุปกรณ์ (เปิดเครื่องไหนข้อมูลไม่หาย)'}
           </span>
         </div>
       </div>

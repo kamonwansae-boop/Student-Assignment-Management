@@ -3,6 +3,9 @@ import {
   getFirestore,
   collection,
   addDoc,
+  setDoc,
+  deleteDoc,
+  getDoc,
   doc,
   updateDoc,
   deleteField,
@@ -22,6 +25,14 @@ import {
 } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 import { handleFirestoreError } from './utils/firebaseErrors';
+import { AppSettings, Assignment, Student, Subject, Submission } from './types';
+import {
+  DEFAULT_SETTINGS,
+  INITIAL_ASSIGNMENTS,
+  INITIAL_STUDENTS,
+  INITIAL_SUBJECTS,
+  INITIAL_SUBMISSIONS,
+} from './utils/assignmentLogic';
 
 // Initialize Firebase App
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -314,3 +325,248 @@ export async function getFirebaseSubmissions(): Promise<FirebaseSubmissionDoc[]>
     return [];
   }
 }
+
+/**
+ * -------------------------------------------------------------
+ * Multi-device Cross-Platform Firestore Cloud Sync
+ * Ensures data is stored in Cloud Firestore and preserved across all devices.
+ * -------------------------------------------------------------
+ */
+
+// --- SUBJECTS ---
+export async function saveSubjectToFirestore(subject: Subject): Promise<void> {
+  try {
+    const docRef = doc(db, 'subjects', subject.id);
+    await setDoc(docRef, { ...subject });
+  } catch (err) {
+    handleFirestoreError(err, 'saveSubjectToFirestore');
+    throw err;
+  }
+}
+
+export async function deleteSubjectFromFirestore(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'subjects', id));
+  } catch (err) {
+    handleFirestoreError(err, 'deleteSubjectFromFirestore');
+    throw err;
+  }
+}
+
+export function subscribeSubjects(callback: (subjects: Subject[]) => void): () => void {
+  try {
+    return onSnapshot(
+      collection(db, 'subjects'),
+      (snapshot) => {
+        const list: Subject[] = snapshot.docs.map((d) => d.data() as Subject);
+        // Sort by grade and room
+        list.sort((a, b) => (a.code || '').localeCompare(b.code || ''));
+        callback(list);
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeSubjects');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeSubjects');
+    return () => {};
+  }
+}
+
+// --- STUDENTS ---
+export async function saveStudentToFirestore(student: Student): Promise<void> {
+  try {
+    const docRef = doc(db, 'students', student.id);
+    await setDoc(docRef, { ...student });
+  } catch (err) {
+    handleFirestoreError(err, 'saveStudentToFirestore');
+    throw err;
+  }
+}
+
+export async function deleteStudentFromFirestore(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'students', id));
+  } catch (err) {
+    handleFirestoreError(err, 'deleteStudentFromFirestore');
+    throw err;
+  }
+}
+
+export function subscribeStudents(callback: (students: Student[]) => void): () => void {
+  try {
+    return onSnapshot(
+      collection(db, 'students'),
+      (snapshot) => {
+        const list: Student[] = snapshot.docs.map((d) => d.data() as Student);
+        list.sort(
+          (a, b) =>
+            (a.grade || '').localeCompare(b.grade || '') ||
+            (a.room || '').localeCompare(b.room || '') ||
+            (a.number || 0) - (b.number || 0)
+        );
+        callback(list);
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeStudents');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeStudents');
+    return () => {};
+  }
+}
+
+// --- ASSIGNMENTS ---
+export async function saveAssignmentToFirestore(assignment: Assignment): Promise<void> {
+  try {
+    const docRef = doc(db, 'assignments', assignment.id);
+    await setDoc(docRef, { ...assignment });
+  } catch (err) {
+    handleFirestoreError(err, 'saveAssignmentToFirestore');
+    throw err;
+  }
+}
+
+export async function deleteAssignmentFromFirestore(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'assignments', id));
+  } catch (err) {
+    handleFirestoreError(err, 'deleteAssignmentFromFirestore');
+    throw err;
+  }
+}
+
+export function subscribeAssignments(callback: (assignments: Assignment[]) => void): () => void {
+  try {
+    return onSnapshot(
+      collection(db, 'assignments'),
+      (snapshot) => {
+        const list: Assignment[] = snapshot.docs.map((d) => d.data() as Assignment);
+        list.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''));
+        callback(list);
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeAssignments');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeAssignments');
+    return () => {};
+  }
+}
+
+// --- SETTINGS ---
+export async function saveSettingsToFirestore(settings: AppSettings): Promise<void> {
+  try {
+    const docRef = doc(db, 'settings', 'app_settings');
+    await setDoc(docRef, { ...settings });
+  } catch (err) {
+    handleFirestoreError(err, 'saveSettingsToFirestore');
+    throw err;
+  }
+}
+
+export function subscribeSettings(callback: (settings: AppSettings) => void): () => void {
+  try {
+    return onSnapshot(
+      doc(db, 'settings', 'app_settings'),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          callback(snapshot.data() as AppSettings);
+        }
+      },
+      (err) => {
+        handleFirestoreError(err, 'subscribeSettings');
+      }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'subscribeSettings');
+    return () => {};
+  }
+}
+
+// --- SUBMISSIONS SYNC ---
+export async function saveSubmissionRecordToFirestore(sub: Submission): Promise<void> {
+  try {
+    const docRef = doc(db, 'submissions', sub.id);
+    await setDoc(
+      docRef,
+      {
+        studentId: sub.studentId,
+        assignmentId: sub.assignmentId,
+        submitDate: sub.submitDate,
+        url: sub.url || '',
+        attachments: sub.attachments || [],
+        comment: sub.comment || '',
+        score: sub.score,
+        graded: sub.graded,
+        isLate: sub.isLate,
+        filePath: sub.filePath || '',
+        fileUrl: sub.fileUrl || '',
+        status: sub.graded ? 'graded' : 'pending',
+        submittedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, 'saveSubmissionRecordToFirestore');
+    throw err;
+  }
+}
+
+/**
+ * Initializes Cloud Firestore database with seed data if currently empty.
+ * Guarantees that any device opening the app for the first time has full access
+ * to subjects, students, assignments, and settings from Firestore cloud.
+ */
+export async function initializeFirestoreDatabaseIfEmpty(): Promise<void> {
+  try {
+    // 1. Settings
+    const settingsDoc = await getDoc(doc(db, 'settings', 'app_settings'));
+    if (!settingsDoc.exists()) {
+      await setDoc(doc(db, 'settings', 'app_settings'), DEFAULT_SETTINGS);
+    }
+
+    // 2. Subjects
+    const subjectsSnap = await getDocs(collection(db, 'subjects'));
+    if (subjectsSnap.empty) {
+      for (const subj of INITIAL_SUBJECTS) {
+        await setDoc(doc(db, 'subjects', subj.id), subj);
+      }
+    }
+
+    // 3. Students
+    const studentsSnap = await getDocs(collection(db, 'students'));
+    if (studentsSnap.empty) {
+      for (const std of INITIAL_STUDENTS) {
+        await setDoc(doc(db, 'students', std.id), std);
+      }
+    }
+
+    // 4. Assignments
+    const assignSnap = await getDocs(collection(db, 'assignments'));
+    if (assignSnap.empty) {
+      for (const asn of INITIAL_ASSIGNMENTS) {
+        await setDoc(doc(db, 'assignments', asn.id), asn);
+      }
+    }
+
+    // 5. Submissions
+    const subSnap = await getDocs(collection(db, 'submissions'));
+    if (subSnap.empty) {
+      for (const s of INITIAL_SUBMISSIONS) {
+        await setDoc(doc(db, 'submissions', s.id), {
+          ...s,
+          title: 'ใบงานเรื่องเซลล์และโครงสร้างพืช',
+          studentName: 'นาย อัครพล มั่งคั่ง',
+          status: 'graded',
+          submittedAt: serverTimestamp(),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('initializeFirestoreDatabaseIfEmpty notice:', err);
+  }
+}
+
