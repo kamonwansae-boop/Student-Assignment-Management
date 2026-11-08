@@ -1,0 +1,6 @@
+{
+  "name": "ระบบ Student Assignment Management",
+  "description": "ระบบบริหารจัดการการส่งงานและตรวจการบ้านนักเรียน (Student Assignment Management System) รองรับมุมมองนักเรียนและคุณครู บันทึกคะแนน สแกน QR Code และส่งออกข้อมูล Excel",
+  "requestFramePermissions": ["CAMERA"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

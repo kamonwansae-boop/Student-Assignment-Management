@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "submissions": {
+      "title": "Submissions",
+      "description": "Student assignment submissions with uploaded work and grading status",
+      "type": "object",
+      "properties": {
+        "studentId": {
+          "type": "string",
+          "description": "Student identification number"
+        },
+        "studentName": {
+          "type": "string",
+          "description": "Full name of student"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the assignment"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "Firebase Storage path in submissions/"
+        },
+        "fileUrl": {
+          "type": "string",
+          "description": "Public download URL for the uploaded image"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "graded"],
+          "description": "Grading status of the submission"
+        },
+        "score": {
+          "type": ["number", "null"],
+          "description": "Score given by teacher or null if pending"
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the work was submitted"
+        }
+      },
+      "required": ["studentId", "studentName", "title", "filePath", "status"]
+    }
+  }
+}
